@@ -1,4 +1,6 @@
+import base64
 import logging
+import re
 
 import requests
 from bs4 import BeautifulSoup
@@ -16,16 +18,56 @@ HEADERS = {
 }
 
 
-def get_group_info(url):
+class CaptchaRequired(Exception):
+    def __init__(self, image_bytes, session, url):
+        self.image_bytes = image_bytes
+        self.session = session
+        self.url = url
+
+
+def _is_captcha_page(html):
+    return "sendF()" in html and "Captcha-Code" in html
+
+
+def _extract_captcha_image(html):
+    match = re.search(
+        r"<img class=capture src=data:image/png;base64,([A-Za-z0-9+/=]+)>", html
+    )
+    if match:
+        return base64.b64decode(match.group(1))
+    return None
+
+
+def solve_captcha(session, url, captcha_text):
+    headers = {**HEADERS, "Captcha-Code": captcha_text.upper().strip()}
+    session.post(url, headers=headers, timeout=30)
+    r = session.get(url, headers=HEADERS, timeout=30)
+    if _is_captcha_page(r.text):
+        return False
+    return True
+
+
+def get_group_info(url, session=None):
     result = {
         "direction": "МТУСИ",
         "my": None,
     }
 
+    if session is None:
+        session = requests.Session()
+
     log.info("Запрос %s", url)
-    r = requests.get(url, headers=HEADERS, timeout=30)
+    r = session.get(url, headers=HEADERS, timeout=30)
     log.info("HTTP %d, URL: %s, длина: %d", r.status_code, r.url, len(r.text))
     r.raise_for_status()
+
+    if _is_captcha_page(r.text):
+        log.warning("МТУСИ: обнаружена капча")
+        image_bytes = _extract_captcha_image(r.text)
+        if image_bytes:
+            raise CaptchaRequired(image_bytes, session, url)
+        log.error("МТУСИ: капча без изображения")
+        return result
 
     soup = BeautifulSoup(r.text, "html.parser")
     tables = soup.find_all("table")

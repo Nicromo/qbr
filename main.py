@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from misis import get_group_info as get_misis_group
 from rea import get_all_my_data, get_group_info
 from telegram import send
-from mtuci import get_group_info as get_mtuci_group
+from mtuci import get_group_info as get_mtuci_group, CaptchaRequired
 import storage
 
 logging.basicConfig(
@@ -230,6 +230,7 @@ def build_report():
     text = f"📊 <b>Мониторинг поступления</b>\n🕐 {now} МСК\n"
 
     errors = []
+    captcha = None
 
     builders = [
         ("РЭУ", build_rea_section),
@@ -240,6 +241,10 @@ def build_report():
     for name, builder in builders:
         try:
             text += "\n" + builder(old_data, new_data)
+        except CaptchaRequired as e:
+            log.warning("Капча требуется для %s", name)
+            text += f"\n🔐 <b>{name}</b>: требуется капча\n\n"
+            captcha = e
         except Exception:
             log.exception("Ошибка при получении данных %s", name)
             text += f"\n❌ <b>{name}</b>: ошибка получения данных\n\n"
@@ -255,11 +260,11 @@ def build_report():
     if errors:
         log.warning("Ошибки в: %s", ", ".join(errors))
 
-    return text, old_data, new_data
+    return text, old_data, new_data, captcha
 
 
 def main():
-    text, old_data, new_data = build_report()
+    text, old_data, new_data, _ = build_report()
 
     changed = storage.has_changes(old_data, new_data)
 

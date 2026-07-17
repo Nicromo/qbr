@@ -6,8 +6,9 @@ import time
 
 import requests
 
-from main import build_report
-from telegram import send_to, _split, API
+from main import build_report, build_mtuci_section, esc
+from mtuci import solve_captcha, get_group_info as get_mtuci_group, CaptchaRequired
+from telegram import send_to, send_photo, API
 import storage
 
 logging.basicConfig(
@@ -18,6 +19,8 @@ log = logging.getLogger("bot")
 
 SUBS_PATH = os.environ.get("SUBSCRIBERS_PATH", "subscribers.json")
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "1800"))
+
+captcha_state = {}
 
 
 def load_subs():
@@ -51,12 +54,71 @@ def cmd_start(chat_id, user):
 def cmd_check(chat_id):
     send_to(chat_id, "⏳ Собираю данные...")
     try:
-        text, _, new_data = build_report()
+        text, old_data, new_data, captcha = build_report()
         send_to(chat_id, text)
         storage.save(new_data)
+
+        if captcha:
+            captcha_state[chat_id] = {
+                "session": captcha.session,
+                "url": captcha.url,
+                "old_data": old_data,
+                "new_data": new_data,
+            }
+            send_photo(
+                chat_id,
+                captcha.image_bytes,
+                "🔐 МТУСИ требует капчу.\nВведи символы с картинки:",
+            )
     except Exception:
         log.exception("Ошибка при проверке")
         send_to(chat_id, "❌ Ошибка при получении данных")
+
+
+def handle_captcha_response(chat_id, text):
+    state = captcha_state.pop(chat_id, None)
+    if not state:
+        return False
+
+    send_to(chat_id, "🔄 Проверяю капчу...")
+
+    if not solve_captcha(state["session"], state["url"], text):
+        send_to(chat_id, "❌ Неверная капча. Нажми /check чтобы попробовать снова")
+        return True
+
+    try:
+        result = get_mtuci_group(state["url"], session=state["session"])
+    except CaptchaRequired:
+        send_to(chat_id, "❌ Капча снова. Нажми /check чтобы попробовать снова")
+        return True
+
+    if not result["my"]:
+        send_to(chat_id, "🏛 <b>МТУСИ</b>\n\n❌ Данные не найдены")
+        return True
+
+    me = result["my"]
+    old_data = state["old_data"]
+    new_data = state["new_data"]
+
+    key = "mtuci_main"
+    delta = storage.get_delta(key, me["place"], old_data)
+    new_data[key] = {
+        "uni": "МТУСИ",
+        "name": result["direction"],
+        "place": me["place"],
+    }
+    storage.save(new_data)
+
+    msg = (
+        f"<b>🏛 МТУСИ</b>\n\n"
+        f"📚 <b>{esc(result['direction'])}</b>\n"
+        f"   Место: <code>{me['place']}</code> {storage.delta_str(delta)}\n"
+        f"   Приоритет: <code>{me['priority']}</code>  │  "
+        f"ИД: <code>{me['id']}</code>\n"
+        f"   Баллы: <code>{me['scores']}</code>\n"
+    )
+    send_to(chat_id, msg)
+    return True
 
 
 def cmd_auto(chat_id):
@@ -98,7 +160,7 @@ def auto_check_loop():
     while True:
         time.sleep(CHECK_INTERVAL)
         try:
-            text, old_data, new_data = build_report()
+            text, old_data, new_data, _ = build_report()
             changed = storage.has_changes(old_data, new_data)
             storage.save(new_data)
 
@@ -120,8 +182,30 @@ def auto_check_loop():
             log.exception("Ошибка автопроверки")
 
 
+BOT_COMMANDS = [
+    {"command": "start", "description": "Начать работу с ботом"},
+    {"command": "check", "description": "Проверить позиции сейчас"},
+    {"command": "auto", "description": "Вкл/выкл автоуведомления"},
+    {"command": "status", "description": "Текущие настройки"},
+]
+
+
+def set_commands():
+    r = requests.post(
+        f"{API}/setMyCommands",
+        json={"commands": BOT_COMMANDS},
+        timeout=10,
+    )
+    if r.ok:
+        log.info("Команды бота зарегистрированы")
+    else:
+        log.warning("Не удалось зарегистрировать команды: %s", r.text)
+
+
 def main():
     log.info("Бот запущен, интервал проверки: %d сек", CHECK_INTERVAL)
+
+    set_commands()
 
     t = threading.Thread(target=auto_check_loop, daemon=True)
     t.start()
@@ -149,6 +233,8 @@ def main():
                 handler = COMMANDS.get(cmd)
                 if handler:
                     handler(chat_id, user)
+                elif not text.startswith("/") and text.strip():
+                    handle_captcha_response(chat_id, text)
 
         except requests.exceptions.Timeout:
             continue
