@@ -3,13 +3,21 @@ name: Admission monitor
 on:
   schedule:
     - cron: "*/30 * * * *"
+    - cron: "0 7 * * *"
 
   workflow_dispatch:
+    inputs:
+      force_send:
+        description: "Отправить даже без изменений"
+        required: false
+        default: "false"
+        type: boolean
 
+permissions:
+  contents: write
 
 jobs:
   run:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -17,22 +25,25 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v4
 
-
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: "3.12"
 
-
     - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-
+      run: pip install -r requirements.txt
 
     - name: Run monitor
       env:
         TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        FORCE_SEND: ${{ github.event.schedule == '0 7 * * *' || github.event.inputs.force_send == 'true' }}
+      run: python main.py
 
+    - name: Save results
       run: |
-        python main.py
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add storage.json
+        git diff --cached --quiet || git commit -m "Update monitoring data [skip ci]"
+        git push
