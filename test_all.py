@@ -227,8 +227,8 @@ class TestTelegramSend(unittest.TestCase):
 
 class TestMtuciParser(unittest.TestCase):
 
-    @patch("mtuci.requests.get")
-    def test_code_found(self, mock_get):
+    @patch("mtuci.requests.Session")
+    def test_code_found(self, mock_session_cls):
         html = """
         <table><tr>
             <td>7</td><td>2164745</td><td>ЕГЭ</td><td>260</td>
@@ -240,33 +240,39 @@ class TestMtuciParser(unittest.TestCase):
         mock_resp.status_code = 200
         mock_resp.url = "https://test.url"
         mock_resp.text = html
-        mock_get.return_value = mock_resp
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_resp
+        mock_session_cls.return_value = mock_session
 
         from mtuci import get_group_info
         result = get_group_info("https://test.url")
         self.assertEqual(result["my"]["place"], "7")
         self.assertEqual(result["my"]["scores"], "260")
 
-    @patch("mtuci.requests.get")
-    def test_not_enough_columns(self, mock_get):
+    @patch("mtuci.requests.Session")
+    def test_not_enough_columns(self, mock_session_cls):
         html = "<table><tr><td>2164745</td><td>data</td></tr></table>"
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.url = "https://test.url"
         mock_resp.text = html
-        mock_get.return_value = mock_resp
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_resp
+        mock_session_cls.return_value = mock_session
 
         from mtuci import get_group_info
         result = get_group_info("https://test.url")
         self.assertIsNone(result["my"])
 
-    @patch("mtuci.requests.get")
-    def test_no_tables(self, mock_get):
+    @patch("mtuci.requests.Session")
+    def test_no_tables(self, mock_session_cls):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.url = "https://test.url"
         mock_resp.text = "<html><body>No tables</body></html>"
-        mock_get.return_value = mock_resp
+        mock_session = MagicMock()
+        mock_session.get.return_value = mock_resp
+        mock_session_cls.return_value = mock_session
 
         from mtuci import get_group_info
         self.assertIsNone(get_group_info("https://test.url")["my"])

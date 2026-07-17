@@ -45,6 +45,17 @@ def send_to(chat_id, text, parse_mode="HTML"):
             log.warning("Telegram %s: %s", r.status_code, r.text)
 
 
+def send_photo(chat_id, photo_bytes, caption=""):
+    r = requests.post(
+        f"{API}/sendPhoto",
+        data={"chat_id": chat_id, "caption": caption},
+        files={"photo": ("captcha.png", photo_bytes, "image/png")},
+        timeout=30,
+    )
+    if not r.ok:
+        log.warning("Telegram photo %s: %s", r.status_code, r.text)
+
+
 def _split(text):
     if len(text) <= MAX_LENGTH:
         return [text]
