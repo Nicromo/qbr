@@ -1,0 +1,16 @@
+[Unit]
+Description=Admission Monitor Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=qbr
+WorkingDirectory=/opt/qbr
+EnvironmentFile=/opt/qbr/.env
+ExecStart=/opt/qbr/.venv/bin/python bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

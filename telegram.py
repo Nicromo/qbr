@@ -3,6 +3,8 @@ import os
 
 import requests
 
+import settings  # noqa: F401
+
 log = logging.getLogger("telegram")
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -10,6 +12,10 @@ CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 API = f"https://api.telegram.org/bot{TOKEN}"
 
 MAX_LENGTH = 4096
+
+
+def is_configured():
+    return bool(TOKEN)
 
 
 def send(text, parse_mode="HTML"):

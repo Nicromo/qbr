@@ -244,10 +244,12 @@ def build_report():
         except CaptchaRequired as e:
             log.warning("Капча требуется для %s", name)
             text += f"\n🔐 <b>{name}</b>: требуется капча\n\n"
+            _keep_previous_source(name, old_data, new_data)
             captcha = e
         except Exception:
             log.exception("Ошибка при получении данных %s", name)
             text += f"\n❌ <b>{name}</b>: ошибка получения данных\n\n"
+            _keep_previous_source(name, old_data, new_data)
             errors.append(name)
 
     summary = build_summary(new_data)
@@ -261,6 +263,13 @@ def build_report():
         log.warning("Ошибки в: %s", ", ".join(errors))
 
     return text, old_data, new_data, captcha
+
+
+def _keep_previous_source(source, old_data, new_data):
+    """Do not turn a temporary source outage into a fake position change."""
+    for key, entry in old_data.items():
+        if entry.get("uni") == source and key not in new_data:
+            new_data[key] = entry
 
 
 def main():

@@ -2,12 +2,18 @@ import json
 import logging
 import os
 
+import state_store
+
 log = logging.getLogger("storage")
 
 STORAGE_PATH = os.environ.get("STORAGE_PATH", "storage.json")
 
 
 def load():
+    if state_store.enabled():
+        data = state_store.load("storage", {})
+        log.info("Загружено из Postgres: %d записей", len(data))
+        return data
     try:
         with open(STORAGE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -19,6 +25,13 @@ def load():
 
 
 def save(data):
+    if state_store.enabled():
+        state_store.save("storage", data)
+        log.info("Сохранено в Postgres: %d записей", len(data))
+        return
+    directory = os.path.dirname(STORAGE_PATH)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
     with open(STORAGE_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     log.info("Сохранено в %s: %d записей", STORAGE_PATH, len(data))

@@ -5,6 +5,8 @@ import os
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "123456")
+os.environ.setdefault("REA_JWT", "test-jwt")
+os.environ.setdefault("REA_PROFILE", "test-profile")
 
 
 class TestCleanName(unittest.TestCase):
@@ -142,6 +144,20 @@ class TestStorage(unittest.TestCase):
         self.assertTrue(has_changes(old, new))
 
 
+class TestReportSourceFailures(unittest.TestCase):
+
+    def test_keeps_previous_source_data_when_request_fails(self):
+        from main import _keep_previous_source
+
+        old = {
+            "rea_group": {"uni": "РЭА", "place": 5},
+            "misis_group": {"uni": "МИСИС", "place": 3},
+        }
+        new = {}
+        _keep_previous_source("РЭА", old, new)
+        self.assertEqual(new, {"rea_group": old["rea_group"]})
+
+
 class TestBuildSummary(unittest.TestCase):
 
     def test_summary_mixed(self):
@@ -276,6 +292,91 @@ class TestMtuciParser(unittest.TestCase):
 
         from mtuci import get_group_info
         self.assertIsNone(get_group_info("https://test.url")["my"])
+
+    def test_submit_captcha_returns_refreshed_data(self):
+        html = """
+        <table><tr>
+            <td>7</td><td>2164745</td><td>ЕГЭ</td><td>260</td>
+            <td>90</td><td>85</td><td>85</td><td>4</td>
+            <td>Да</td><td>1</td>
+        </tr></table>
+        """
+        session = MagicMock()
+        post_response = MagicMock()
+        get_response = MagicMock()
+        get_response.text = html
+        session.post.return_value = post_response
+        session.get.return_value = get_response
+
+        from mtuci import submit_captcha
+        result = submit_captcha(session, "https://test.url", "a1b2")
+
+        self.assertEqual(result["my"]["place"], "7")
+        self.assertEqual(session.post.call_args.kwargs["headers"]["Captcha-Code"], "A1B2")
+
+    def test_submit_captcha_requests_new_image_when_wrong(self):
+        image = b"captcha-image"
+        encoded = "Y2FwdGNoYS1pbWFnZQ=="
+        captcha_page = f'<script>sendF()</script> Captcha-Code <img class=capture src=data:image/png;base64,{encoded}>'
+        session = MagicMock()
+        session.post.return_value = MagicMock()
+        response = MagicMock()
+        response.text = captcha_page
+        session.get.return_value = response
+
+        from mtuci import CaptchaRequired, submit_captcha
+        with self.assertRaises(CaptchaRequired) as raised:
+            submit_captcha(session, "https://test.url", "wrong")
+        self.assertEqual(raised.exception.image_bytes, image)
+
+
+class TestBotCaptchaFlow(unittest.TestCase):
+
+    def setUp(self):
+        import bot
+        bot.captcha_state.clear()
+
+    @patch("bot.storage.save")
+    @patch("bot.send_to")
+    @patch("bot.submit_captcha")
+    def test_sends_mtuci_update_after_captcha(self, mock_submit, mock_send, mock_save):
+        import bot
+        chat_id = 42
+        bot.captcha_state[chat_id] = {
+            "session": MagicMock(),
+            "url": "https://test.url",
+            "old_data": {"mtuci_main": {"place": "9"}},
+            "new_data": {},
+        }
+        mock_submit.return_value = {
+            "direction": "Информатика",
+            "my": {"place": "7", "priority": "1", "id": "4", "scores": "260"},
+        }
+
+        self.assertTrue(bot.handle_captcha_response(chat_id, "a1b2"))
+        self.assertNotIn(chat_id, bot.captcha_state)
+        self.assertEqual(mock_save.call_args.args[0]["mtuci_main"]["place"], "7")
+        self.assertIn("Место: <code>7</code>", mock_send.call_args.args[1])
+
+    @patch("bot.send_to")
+    @patch("bot.send_photo")
+    @patch("bot.submit_captcha")
+    def test_wrong_captcha_keeps_flow_open(self, mock_submit, mock_photo, mock_send):
+        import bot
+        chat_id = 42
+        session = MagicMock()
+        bot.captcha_state[chat_id] = {
+            "session": session,
+            "url": "https://test.url",
+            "old_data": {},
+            "new_data": {},
+        }
+        from mtuci import CaptchaRequired
+        mock_submit.side_effect = CaptchaRequired(b"new-image", session, "https://test.url")
+
+        self.assertTrue(bot.handle_captcha_response(chat_id, "wrong"))
+        self.assertIn(chat_id, bot.captcha_state)
+        self.assertEqual(mock_photo.call_args.args[1], b"new-image")
 
 
 class TestMisisParser(unittest.TestCase):

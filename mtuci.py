@@ -38,38 +38,13 @@ def _extract_captcha_image(html):
     return None
 
 
-def solve_captcha(session, url, captcha_text):
-    headers = {**HEADERS, "Captcha-Code": captcha_text.upper().strip()}
-    session.post(url, headers=headers, timeout=30)
-    r = session.get(url, headers=HEADERS, timeout=30)
-    if _is_captcha_page(r.text):
-        return False
-    return True
-
-
-def get_group_info(url, session=None):
+def _parse_group_info(html, group_id):
     result = {
         "direction": "МТУСИ",
         "my": None,
     }
 
-    if session is None:
-        session = requests.Session()
-
-    log.info("Запрос %s", url)
-    r = session.get(url, headers=HEADERS, timeout=30)
-    log.info("HTTP %d, URL: %s, длина: %d", r.status_code, r.url, len(r.text))
-    r.raise_for_status()
-
-    if _is_captcha_page(r.text):
-        log.warning("МТУСИ: обнаружена капча")
-        image_bytes = _extract_captcha_image(r.text)
-        if image_bytes:
-            raise CaptchaRequired(image_bytes, session, url)
-        log.error("МТУСИ: капча без изображения")
-        return result
-
-    soup = BeautifulSoup(r.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
     tables = soup.find_all("table")
     log.info("Найдено таблиц: %d", len(tables))
 
@@ -103,3 +78,38 @@ def get_group_info(url, session=None):
 
     log.info("Не найден в МТУСИ (код %s)", MY_CODE)
     return result
+
+
+def submit_captcha(session, url, captcha_text):
+    """Submit a Telegram user's answer and return the refreshed MTUCI result."""
+    headers = {**HEADERS, "Captcha-Code": captcha_text.upper().strip()}
+    response = session.post(url, headers=headers, timeout=30)
+    response.raise_for_status()
+    r = session.get(url, headers=HEADERS, timeout=30)
+    r.raise_for_status()
+    if _is_captcha_page(r.text):
+        image_bytes = _extract_captcha_image(r.text)
+        if image_bytes:
+            raise CaptchaRequired(image_bytes, session, url)
+        raise RuntimeError("МТУСИ вернул страницу капчи без изображения")
+    return _parse_group_info(r.text, url)
+
+
+def get_group_info(url, session=None):
+    if session is None:
+        session = requests.Session()
+
+    log.info("Запрос %s", url)
+    r = session.get(url, headers=HEADERS, timeout=30)
+    log.info("HTTP %d, URL: %s, длина: %d", r.status_code, r.url, len(r.text))
+    r.raise_for_status()
+
+    if _is_captcha_page(r.text):
+        log.warning("МТУСИ: обнаружена капча")
+        image_bytes = _extract_captcha_image(r.text)
+        if image_bytes:
+            raise CaptchaRequired(image_bytes, session, url)
+        log.error("МТУСИ: капча без изображения")
+        return {"direction": "МТУСИ", "my": None}
+
+    return _parse_group_info(r.text, url)
