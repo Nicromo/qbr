@@ -1,9 +1,11 @@
+import hmac
 import logging
 import os
 import re
+import time
 from datetime import datetime, timezone, timedelta
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from misis import get_group_info as get_misis_group
 from rea import get_all_my_data, get_group_info
@@ -28,6 +30,45 @@ app = Flask(__name__)
 @app.get("/")
 def healthcheck():
     return jsonify({"ok": True, "service": "qbr-bot"})
+
+
+@app.post("/api/telegram")
+def telegram_webhook():
+    expected_secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "")
+    received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not expected_secret or not hmac.compare_digest(expected_secret, received_secret):
+        return jsonify({"ok": False}), 401
+
+    update = request.get_json(silent=True)
+    if not update:
+        return jsonify({"ok": False, "error": "invalid update"}), 400
+
+    import bot
+
+    bot.process_update(update)
+    return jsonify({"ok": True})
+
+
+@app.get("/api/check")
+def scheduled_check():
+    expected_secret = os.environ.get("CHECK_SECRET", "")
+    received_secret = request.args.get("token", "")
+    if not expected_secret or not hmac.compare_digest(expected_secret, received_secret):
+        return jsonify({"ok": False}), 401
+
+    import bot
+    import state_store
+
+    runtime = state_store.load("runtime", {})
+    now = time.time()
+    if now - runtime.get("last_auto_check", 0) < bot.CHECK_INTERVAL:
+        return jsonify({"ok": True, "checked": False})
+
+    if bot.auto_check_once():
+        runtime["last_auto_check"] = now
+        state_store.save("runtime", runtime)
+        return jsonify({"ok": True, "checked": True})
+    return jsonify({"ok": False, "checked": False}), 502
 
 
 def esc(text):
