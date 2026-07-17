@@ -11,14 +11,18 @@ CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 MAX_LENGTH = 4096
 
 
-def send(text):
+def send(text, parse_mode="HTML"):
     chunks = _split(text)
     log.info("Отправка: %d символов, %d частей", len(text), len(chunks))
 
     for i, chunk in enumerate(chunks):
+        payload = {"chat_id": CHAT_ID, "text": chunk}
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+
         r = requests.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            data={"chat_id": CHAT_ID, "text": chunk},
+            data=payload,
             timeout=30,
         )
 

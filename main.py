@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import datetime, timezone, timedelta
 
 from misis import get_group_info as get_misis_group
 from rea import get_all_my_data, get_group_info
@@ -11,6 +12,24 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 log = logging.getLogger("main")
+
+MSK = timezone(timedelta(hours=3))
+
+
+def esc(text):
+    for ch in ("&", "<", ">"):
+        text = str(text).replace(ch, {"&": "&amp;", "<": "&lt;", ">": "&gt;"}[ch])
+    return text
+
+
+def pass_indicator(to_pass):
+    if isinstance(to_pass, str):
+        return to_pass
+    if to_pass <= 0:
+        return f"✅ Проходишь ({to_pass})"
+    if to_pass <= 5:
+        return f"🟡 Почти ({to_pass})"
+    return f"🔴 {to_pass}"
 
 
 def clean_name(name):
@@ -26,7 +45,7 @@ def clean_name(name):
 
 
 def build_rea_section():
-    section = "🏛 РЭУ Плеханова\n\n"
+    section = "<b>🏛 РЭУ Плеханова</b>\n\n"
 
     rows = get_all_my_data()
     log.info("РЭУ: получено %d записей", len(rows))
@@ -49,14 +68,13 @@ def build_rea_section():
         to_pass = row["rating"] - places if places else "-"
 
         section += (
-            f"📚 {group_name}\n"
-            f"📍 Место: {row['rating']}\n"
-            f"🎯 Приоритет: {row['priority']}\n"
-            f"🏅 ИД: {row['achievements_mark']}\n"
-            f"📈 Сумма: {row['sum_mark']}\n"
-            f"🎓 Мест: {places}\n"
-            f"📉 До прохода: {to_pass}\n"
-            "━━━━━━━━━━━━━━\n\n"
+            f"📚 <b>{esc(group_name)}</b>\n"
+            f"   Место: <code>{row['rating']}</code>  │  "
+            f"Мест: <code>{places}</code>\n"
+            f"   Приоритет: <code>{row['priority']}</code>  │  "
+            f"ИД: <code>{row['achievements_mark']}</code>\n"
+            f"   Сумма: <code>{row['sum_mark']}</code>\n"
+            f"   ➜ {pass_indicator(to_pass)}\n\n"
         )
 
     return section
@@ -75,7 +93,7 @@ MISIS_GROUPS = [
 
 
 def build_misis_section():
-    section = "🏛 МИСИС\n\n"
+    section = "<b>🏛 МИСИС</b>\n\n"
 
     for group in MISIS_GROUPS:
         misis = get_misis_group(group["id"])
@@ -87,15 +105,16 @@ def build_misis_section():
         me = misis["my"]
         log.info("МИСИС %s: место %s", group["id"], me["place"])
 
+        badge = "🆓" if group["type"] == "Бюджет" else "💰"
+
         section += (
-            f"📚 {misis['direction']} — {group['type']}\n"
-            f"📍 Место: {me['place']}\n"
-            f"🎯 Приоритет: {me['priority']}\n"
-            f"🏅 ИД: {me['id']}\n"
-            f"📈 Баллы: {me['scores']}\n"
-            f"🎓 Мест: {misis['places']}\n"
-            f"📉 До прохода: {me['to_pass']}\n"
-            "━━━━━━━━━━━━━━\n\n"
+            f"📚 <b>{esc(misis['direction'])}</b>  {badge} {esc(group['type'])}\n"
+            f"   Место: <code>{me['place']}</code>  │  "
+            f"Мест: <code>{misis['places']}</code>\n"
+            f"   Приоритет: <code>{me['priority']}</code>  │  "
+            f"ИД: <code>{me['id']}</code>\n"
+            f"   Баллы: <code>{me['scores']}</code>\n"
+            f"   ➜ {pass_indicator(me['to_pass'])}\n\n"
         )
 
     return section
@@ -114,7 +133,7 @@ MTUCI_URL = (
 
 
 def build_mtuci_section():
-    section = "🏛 МТУСИ\n\n"
+    section = "<b>🏛 МТУСИ</b>\n\n"
 
     result = get_mtuci_group(MTUCI_URL)
 
@@ -123,22 +142,23 @@ def build_mtuci_section():
         log.info("МТУСИ: место %s", me["place"])
 
         section += (
-            f"📚 {result['direction']}\n"
-            f"📍 Место: {me['place']}\n"
-            f"🎯 Приоритет: {me['priority']}\n"
-            f"🏅 ИД: {me['id']}\n"
-            f"📈 Баллы: {me['scores']}\n"
-            "━━━━━━━━━━━━━━\n\n"
+            f"📚 <b>{esc(result['direction'])}</b>\n"
+            f"   Место: <code>{me['place']}</code>\n"
+            f"   Приоритет: <code>{me['priority']}</code>  │  "
+            f"ИД: <code>{me['id']}</code>\n"
+            f"   Баллы: <code>{me['scores']}</code>\n\n"
         )
     else:
         log.warning("МТУСИ: данные не найдены")
-        section += "❌ МТУСИ: данные не найдены\n\n"
+        section += "❌ Данные не найдены\n\n"
 
     return section
 
 
 def main():
-    text = ""
+    now = datetime.now(MSK).strftime("%d.%m.%Y %H:%M")
+    text = f"📊 <b>Мониторинг поступления</b>\n🕐 {now} МСК\n\n"
+
     errors = []
 
     builders = [
@@ -152,7 +172,7 @@ def main():
             text += builder()
         except Exception:
             log.exception("Ошибка при получении данных %s", name)
-            text += f"❌ {name}: ошибка получения данных\n\n"
+            text += f"❌ <b>{name}</b>: ошибка получения данных\n\n"
             errors.append(name)
 
     if errors:

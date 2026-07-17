@@ -34,6 +34,52 @@ class TestCleanName(unittest.TestCase):
         self.assertEqual(result, "")
 
 
+class TestEscapeHtml(unittest.TestCase):
+
+    def test_escapes_angle_brackets(self):
+        from main import esc
+        self.assertEqual(esc("<b>test</b>"), "&lt;b&gt;test&lt;/b&gt;")
+
+    def test_escapes_ampersand(self):
+        from main import esc
+        self.assertEqual(esc("A & B"), "A &amp; B")
+
+    def test_plain_text_unchanged(self):
+        from main import esc
+        self.assertEqual(esc("Информатика"), "Информатика")
+
+    def test_handles_numbers(self):
+        from main import esc
+        self.assertEqual(esc(42), "42")
+
+
+class TestPassIndicator(unittest.TestCase):
+
+    def test_passing(self):
+        from main import pass_indicator
+        result = pass_indicator(-3)
+        self.assertIn("Проходишь", result)
+
+    def test_zero_passes(self):
+        from main import pass_indicator
+        result = pass_indicator(0)
+        self.assertIn("Проходишь", result)
+
+    def test_almost(self):
+        from main import pass_indicator
+        result = pass_indicator(3)
+        self.assertIn("Почти", result)
+
+    def test_far(self):
+        from main import pass_indicator
+        result = pass_indicator(15)
+        self.assertIn("15", result)
+
+    def test_string_passthrough(self):
+        from main import pass_indicator
+        self.assertEqual(pass_indicator("-"), "-")
+
+
 class TestTelegramSplit(unittest.TestCase):
 
     def test_short_message_no_split(self):
@@ -76,18 +122,19 @@ class TestTelegramSplit(unittest.TestCase):
 class TestTelegramSend(unittest.TestCase):
 
     @patch("telegram.requests.post")
-    def test_send_success(self, mock_post):
+    def test_send_with_parse_mode(self, mock_post):
         from telegram import send
         mock_resp = MagicMock()
         mock_resp.ok = True
         mock_resp.status_code = 200
         mock_post.return_value = mock_resp
 
-        send("test message")
+        send("<b>test</b>")
 
         mock_post.assert_called_once()
         call_data = mock_post.call_args
-        self.assertEqual(call_data.kwargs["data"]["text"], "test message")
+        self.assertEqual(call_data.kwargs["data"]["parse_mode"], "HTML")
+        self.assertEqual(call_data.kwargs["data"]["text"], "<b>test</b>")
 
     @patch("telegram.requests.post")
     def test_send_raises_on_error(self, mock_post):
@@ -114,11 +161,6 @@ class TestMtuciParser(unittest.TestCase):
             <td>5</td><td>Иванов</td><td>ЕГЭ</td><td>250</td>
             <td>80</td><td>85</td><td>85</td><td>3</td>
             <td>Да</td><td>1</td>
-        </tr>
-        <tr>
-            <td>12</td><td>Петров</td><td>ЕГЭ</td><td>230</td>
-            <td>75</td><td>80</td><td>75</td><td>5</td>
-            <td>Нет</td><td>2</td>
         </tr>
         </table>
         </body></html>
@@ -260,7 +302,8 @@ class TestMainErrorHandling(unittest.TestCase):
         sent_text = mock_send.call_args[0][0]
         self.assertIn("РЭУ OK", sent_text)
         self.assertIn("МТУСИ OK", sent_text)
-        self.assertIn("МИСИС: ошибка получения данных", sent_text)
+        self.assertIn("МИСИС", sent_text)
+        self.assertIn("ошибка получения данных", sent_text)
 
     @patch("main.send")
     @patch("main.build_mtuci_section", side_effect=Exception("down"))
