@@ -30,23 +30,19 @@
 Файлы `storage.json` и `subscribers.json` создаются рядом с программой и хранят
 последние позиции и настройки подписки.
 
-## Бесплатная работа без сервера на один месяц
+## Бесплатная работа на Vercel
 
-Для мгновенных команд и капчи используй Render Free Web Service. Он даёт 750
-часов работы на календарный месяц; для одного сервиса этого хватает на месяц.
-Рядом Blueprint создаёт бесплатную Postgres-базу, которая хранит позиции,
-подписки и сессию капчи. База истекает через 30 дней, поэтому этот вариант
-подходит как временный.
+На Vercel бот работает через Telegram webhook: `/check` и ответ на капчу
+обрабатываются сразу, без постоянно запущенного процесса. Подключи бесплатный
+Neon Postgres в Vercel Marketplace - он автоматически добавит `DATABASE_URL`.
+Укажи переменные `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` и
+`CHECK_SECRET`; для РЭА также добавь `REA_JWT` и `REA_PROFILE`.
 
-1. Подключи GitHub-репозиторий в Render и создай сервис из `render.yaml`.
-2. В Render задай `TELEGRAM_BOT_TOKEN`; для РЭА также укажи `REA_JWT` и
-   `REA_PROFILE`.
-3. После первого деплоя скопируй адрес сервиса вида `https://qbr-bot.onrender.com`
-   и создай бесплатный HTTP(s) monitor в UptimeRobot для
-   `https://qbr-bot.onrender.com/health` с интервалом 5 минут.
-
-UptimeRobot не даёт сервису простаивать 15 минут, поэтому Telegram-поллинг
-остаётся активным: `/check` и ответ на капчу обрабатываются сразу.
+После деплоя установи webhook Telegram на
+`https://<имя-проекта>.vercel.app/api/telegram` и создай в UptimeRobot
+бесплатный HTTP(s)-monitor на
+`https://<имя-проекта>.vercel.app/api/check?token=<CHECK_SECRET>` с интервалом
+5 минут. Этот endpoint выполнит проверку только раз в 6 часов.
 
 ## Постоянная работа при выключенном ПК
 

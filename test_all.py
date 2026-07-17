@@ -379,6 +379,38 @@ class TestBotCaptchaFlow(unittest.TestCase):
         self.assertEqual(mock_photo.call_args.args[1], b"new-image")
 
 
+class TestVercelEndpoints(unittest.TestCase):
+
+    @patch("api.telegram.bot.process_update")
+    def test_telegram_webhook_processes_valid_update(self, mock_process):
+        os.environ["TELEGRAM_WEBHOOK_SECRET"] = "webhook-secret"
+        from api.telegram import app
+        client = app.test_client()
+
+        response = client.post(
+            "/",
+            json={"update_id": 1},
+            headers={"X-Telegram-Bot-Api-Secret-Token": "webhook-secret"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_process.assert_called_once_with({"update_id": 1})
+
+    @patch("api.check.state_store.save")
+    @patch("api.check.state_store.load", return_value={})
+    @patch("api.check.bot.auto_check_once", return_value=True)
+    def test_check_endpoint_runs_due_update(self, mock_auto, mock_load, mock_save):
+        os.environ["CHECK_SECRET"] = "check-secret"
+        from api.check import app
+        client = app.test_client()
+
+        response = client.get("/?token=check-secret")
+
+        self.assertEqual(response.status_code, 200)
+        mock_auto.assert_called_once()
+        mock_save.assert_called_once()
+
+
 class TestMisisParser(unittest.TestCase):
 
     @patch("misis.requests.get")

@@ -328,21 +328,25 @@ def process_updates(offset=None, timeout=30):
 
     for update in r.json().get("result", []):
         offset = update["update_id"] + 1
-        msg = update.get("message")
-        if not msg:
-            continue
-
-        text = msg.get("text", "")
-        chat_id = msg["chat"]["id"]
-        user = msg.get("from", {})
-        cmd = text.split("@")[0] if "@" in text else text
-        handler = COMMANDS.get(cmd)
-        if handler:
-            handler(chat_id, user)
-        elif not text.startswith("/") and text.strip():
-            handle_captcha_response(chat_id, text)
+        process_update(update)
 
     return offset
+
+
+def process_update(update):
+    msg = update.get("message")
+    if not msg:
+        return
+
+    text = msg.get("text", "")
+    chat_id = msg["chat"]["id"]
+    user = msg.get("from", {})
+    cmd = text.split("@")[0] if "@" in text else text
+    handler = COMMANDS.get(cmd)
+    if handler:
+        handler(chat_id, user)
+    elif not text.startswith("/") and text.strip():
+        handle_captcha_response(chat_id, text)
 
 
 def main():
