@@ -3,6 +3,8 @@ import os
 import re
 from datetime import datetime, timezone, timedelta
 
+from flask import Flask, jsonify
+
 from misis import get_group_info as get_misis_group
 from rea import get_all_my_data, get_group_info
 from telegram import send
@@ -18,6 +20,14 @@ log = logging.getLogger("main")
 MSK = timezone(timedelta(hours=3))
 
 FORCE_SEND = os.environ.get("FORCE_SEND", "").lower() in ("1", "true", "yes")
+
+# Vercel discovers this module while the bot's actual request handlers live in api/.
+app = Flask(__name__)
+
+
+@app.get("/")
+def healthcheck():
+    return jsonify({"ok": True, "service": "qbr-bot"})
 
 
 def esc(text):
