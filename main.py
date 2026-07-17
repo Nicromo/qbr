@@ -222,7 +222,7 @@ def build_summary(new_data):
     return ""
 
 
-def main():
+def build_report():
     old_data = storage.load()
     new_data = {}
 
@@ -254,6 +254,12 @@ def main():
 
     if errors:
         log.warning("Ошибки в: %s", ", ".join(errors))
+
+    return text, old_data, new_data
+
+
+def main():
+    text, old_data, new_data = build_report()
 
     changed = storage.has_changes(old_data, new_data)
 
