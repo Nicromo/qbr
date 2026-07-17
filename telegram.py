@@ -5,8 +5,9 @@ import requests
 
 log = logging.getLogger("telegram")
 
-TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+API = f"https://api.telegram.org/bot{TOKEN}"
 
 MAX_LENGTH = 4096
 
@@ -21,7 +22,7 @@ def send(text, parse_mode="HTML"):
             payload["parse_mode"] = parse_mode
 
         r = requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+            f"{API}/sendMessage",
             data=payload,
             timeout=30,
         )
@@ -31,6 +32,17 @@ def send(text, parse_mode="HTML"):
             r.raise_for_status()
 
         log.info("Часть %d/%d отправлена (код %d)", i + 1, len(chunks), r.status_code)
+
+
+def send_to(chat_id, text, parse_mode="HTML"):
+    chunks = _split(text)
+    for chunk in chunks:
+        payload = {"chat_id": chat_id, "text": chunk}
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
+        r = requests.post(f"{API}/sendMessage", data=payload, timeout=30)
+        if not r.ok:
+            log.warning("Telegram %s: %s", r.status_code, r.text)
 
 
 def _split(text):
