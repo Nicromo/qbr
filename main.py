@@ -8,7 +8,7 @@ from datetime import datetime, timezone, timedelta
 from flask import Flask, jsonify, request
 
 from misis import get_group_info as get_misis_group
-from rea import get_all_my_data, get_group_info
+from rea import ReaAuthError, ReaNotConfigured, get_all_my_data, get_group_info
 from telegram import send
 from mtuci import get_group_info as get_mtuci_group, CaptchaRequired
 import storage
@@ -297,6 +297,16 @@ def build_report():
             text += f"\n🔐 <b>{name}</b>: требуется капча\n\n"
             _keep_previous_source(name, old_data, new_data)
             captcha = e
+        except ReaNotConfigured:
+            log.warning("РЭУ не настроен")
+            text += "\n❌ <b>РЭУ</b>: доступ к спискам не настроен\n\n"
+            _keep_previous_source(name, old_data, new_data)
+            errors.append(name)
+        except ReaAuthError:
+            log.warning("РЭУ отклонил ключ доступа")
+            text += "\n🔑 <b>РЭУ</b>: ключ доступа истёк или недействителен\n\n"
+            _keep_previous_source(name, old_data, new_data)
+            errors.append(name)
         except Exception:
             log.exception("Ошибка при получении данных %s", name)
             text += f"\n❌ <b>{name}</b>: ошибка получения данных\n\n"

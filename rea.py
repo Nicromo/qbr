@@ -13,6 +13,10 @@ class ReaNotConfigured(RuntimeError):
     pass
 
 
+class ReaAuthError(RuntimeError):
+    pass
+
+
 def _load_config():
     jwt = os.environ.get("REA_JWT", "")
     profile = os.environ.get("REA_PROFILE", "")
@@ -43,6 +47,12 @@ def _headers(cfg):
     }
 
 
+def _raise_for_status(response):
+    if response.status_code in (401, 403):
+        raise ReaAuthError("РЭУ отклонил ключ доступа")
+    response.raise_for_status()
+
+
 def get_all_my_data():
     cfg = _get_config()
     log.info("Запрос списка абитуриентов для профиля %s", cfg["profile"])
@@ -57,7 +67,7 @@ def get_all_my_data():
         },
         timeout=30,
     )
-    r.raise_for_status()
+    _raise_for_status(r)
 
     data = r.json()
     log.info("Получено %d записей", len(data))
@@ -77,7 +87,7 @@ def get_group_info(group_id):
         },
         timeout=30,
     )
-    r.raise_for_status()
+    _raise_for_status(r)
 
     data = r.json()
 

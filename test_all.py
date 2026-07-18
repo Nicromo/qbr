@@ -521,6 +521,17 @@ class TestReaModule(unittest.TestCase):
         from rea import get_group_info
         self.assertIsNone(get_group_info("test-id"))
 
+    @patch("rea.requests.get")
+    def test_unauthorized_key_has_specific_error(self, mock_get):
+        mock_resp = MagicMock()
+        mock_resp.status_code = 401
+        mock_get.return_value = mock_resp
+
+        from rea import ReaAuthError, get_all_my_data
+
+        with self.assertRaises(ReaAuthError):
+            get_all_my_data()
+
 
 if __name__ == "__main__":
     unittest.main()
