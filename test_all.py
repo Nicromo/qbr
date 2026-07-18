@@ -243,6 +243,17 @@ class TestTelegramSend(unittest.TestCase):
 
 class TestMtuciParser(unittest.TestCase):
 
+    def test_full_list_url_keeps_rank_numbering(self):
+        from mtuci import _full_list_url
+
+        self.assertEqual(
+            _full_list_url(
+                "https://test.url/list?valueSearch=2164745&priznakViev=budg&"
+                "search_type=uniqueID&originalFilter="
+            ),
+            "https://test.url/list?priznakViev=budg&originalFilter=",
+        )
+
     @patch("mtuci.requests.Session")
     def test_code_found(self, mock_session_cls):
         html = """

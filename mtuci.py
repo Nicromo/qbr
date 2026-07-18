@@ -1,6 +1,7 @@
 import base64
 import logging
 import re
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 from bs4 import BeautifulSoup
@@ -23,6 +24,17 @@ class CaptchaRequired(Exception):
         self.image_bytes = image_bytes
         self.session = session
         self.url = url
+
+
+def _full_list_url(url):
+    """Remove the applicant filter so MTUCI keeps the real rank numbering."""
+    parts = urlsplit(url)
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        if key not in {"valueSearch", "search_type"}
+    ]
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 
 def _is_captcha_page(html):
@@ -99,8 +111,9 @@ def get_group_info(url, session=None):
     if session is None:
         session = requests.Session()
 
-    log.info("Запрос %s", url)
-    r = session.get(url, headers=HEADERS, timeout=30)
+    list_url = _full_list_url(url)
+    log.info("Запрос %s", list_url)
+    r = session.get(list_url, headers=HEADERS, timeout=45)
     log.info("HTTP %d, URL: %s, длина: %d", r.status_code, r.url, len(r.text))
     r.raise_for_status()
 
@@ -108,7 +121,7 @@ def get_group_info(url, session=None):
         log.warning("МТУСИ: обнаружена капча")
         image_bytes = _extract_captcha_image(r.text)
         if image_bytes:
-            raise CaptchaRequired(image_bytes, session, url)
+            raise CaptchaRequired(image_bytes, session, list_url)
         log.error("МТУСИ: капча без изображения")
         return {"direction": "МТУСИ", "my": None}
 
