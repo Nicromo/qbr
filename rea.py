@@ -8,6 +8,10 @@ import settings  # noqa: F401
 
 log = logging.getLogger("rea")
 
+REA_SITE_URL = "https://abitrating.rea.ru/"
+REA_STATUS_AVAILABLE = "available"
+REA_STATUS_MAINTENANCE = "maintenance"
+
 
 class ReaNotConfigured(RuntimeError):
     pass
@@ -51,6 +55,16 @@ def _raise_for_status(response):
     if response.status_code in (401, 403):
         raise ReaAuthError("РЭУ отклонил ключ доступа")
     response.raise_for_status()
+
+
+def get_service_status():
+    """Return the public availability status before querying protected lists."""
+    response = requests.get(REA_SITE_URL, timeout=20)
+    response.raise_for_status()
+    page_text = response.text.lower()
+    if "техническ" in page_text and "обслуживан" in page_text:
+        return REA_STATUS_MAINTENANCE
+    return REA_STATUS_AVAILABLE
 
 
 def get_all_my_data():

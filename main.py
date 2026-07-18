@@ -8,7 +8,15 @@ from datetime import datetime, timezone, timedelta
 from flask import Flask, jsonify, request
 
 from misis import get_group_info as get_misis_group
-from rea import ReaAuthError, ReaNotConfigured, get_all_my_data, get_group_info
+from rea import (
+    REA_STATUS_AVAILABLE,
+    REA_STATUS_MAINTENANCE,
+    ReaAuthError,
+    ReaNotConfigured,
+    get_all_my_data,
+    get_group_info,
+    get_service_status as get_rea_service_status,
+)
 from telegram import send
 from mtuci import get_group_info as get_mtuci_group, CaptchaRequired
 import storage
@@ -101,6 +109,12 @@ def clean_name(name):
 
 def build_rea_section(old_data, new_data):
     section = "<b>🏛 РЭУ Плеханова</b>\n\n"
+
+    status = get_rea_service_status()
+    new_data["rea_status"] = {"uni": "РЭУ", "status": status}
+    if status == REA_STATUS_MAINTENANCE:
+        log.warning("РЭУ: техническое обслуживание")
+        return section + "🔧 РЭУ: на сайте технические работы, проверим снова автоматически\n\n"
 
     rows = get_all_my_data()
     log.info("РЭУ: получено %d записей", len(rows))
@@ -299,7 +313,10 @@ def build_report():
             captcha = e
         except ReaNotConfigured:
             log.warning("РЭУ не настроен")
-            text += "\n❌ <b>РЭУ</b>: доступ к спискам не настроен\n\n"
+            if new_data.get("rea_status", {}).get("status") == REA_STATUS_AVAILABLE:
+                text += "\n🟢 <b>РЭУ</b>: технические работы завершились, но доступ к спискам не настроен\n\n"
+            else:
+                text += "\n❌ <b>РЭУ</b>: доступ к спискам не настроен\n\n"
             _keep_previous_source(name, old_data, new_data)
             errors.append(name)
         except ReaAuthError:

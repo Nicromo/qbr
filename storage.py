@@ -64,6 +64,8 @@ def has_changes(old_data, new_data):
         return True
     for key, new_entry in new_data.items():
         old_entry = old_data.get(key, {})
+        if key == "rea_status" and old_entry.get("status") != new_entry.get("status"):
+            return True
         if old_entry.get("place") != new_entry.get("place"):
             return True
     for key in old_data:

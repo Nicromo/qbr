@@ -143,6 +143,13 @@ class TestStorage(unittest.TestCase):
         new = {"a": {"place": 5}}
         self.assertTrue(has_changes(old, new))
 
+    def test_has_changes_when_rea_maintenance_ends(self):
+        from storage import has_changes
+
+        old = {"rea_status": {"status": "maintenance"}}
+        new = {"rea_status": {"status": "available"}}
+        self.assertTrue(has_changes(old, new))
+
 
 class TestReportSourceFailures(unittest.TestCase):
 
@@ -506,6 +513,16 @@ class TestMainErrorHandling(unittest.TestCase):
 class TestReaModule(unittest.TestCase):
 
     @patch("rea.requests.get")
+    def test_detects_maintenance(self, mock_get):
+        mock_response = MagicMock()
+        mock_response.text = "Сайт временно недоступен в связи с техническим обслуживанием"
+        mock_get.return_value = mock_response
+
+        from rea import REA_STATUS_MAINTENANCE, get_service_status
+
+        self.assertEqual(get_service_status(), REA_STATUS_MAINTENANCE)
+
+    @patch("rea.requests.get")
     def test_get_all_my_data(self, mock_get):
         mock_resp = MagicMock()
         mock_resp.json.return_value = [{"rating": 5, "priority": 1}]
@@ -542,6 +559,23 @@ class TestReaModule(unittest.TestCase):
 
         with self.assertRaises(ReaAuthError):
             get_all_my_data()
+
+
+class TestReaStatus(unittest.TestCase):
+
+    @patch("main.get_all_my_data")
+    @patch("main.get_rea_service_status", return_value="maintenance")
+    def test_reports_maintenance_without_requesting_private_lists(
+        self, mock_status, mock_get_data
+    ):
+        from main import build_rea_section
+
+        new_data = {}
+        text = build_rea_section({}, new_data)
+
+        self.assertIn("технические работы", text)
+        self.assertEqual(new_data["rea_status"]["status"], "maintenance")
+        mock_get_data.assert_not_called()
 
 
 if __name__ == "__main__":
